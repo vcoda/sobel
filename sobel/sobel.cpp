@@ -10,7 +10,7 @@ class SobelApp : public VulkanApp
     std::shared_ptr<magma::DescriptorSetLayout> descriptorSetLayout;
     std::shared_ptr<magma::DescriptorSet> descriptorSet;
     std::shared_ptr<magma::PipelineLayout> pipelineLayout;
-    std::shared_ptr<magma::GraphicsPipeline> wireframeDrawPipeline;
+    std::shared_ptr<magma::GraphicsPipeline> solidDrawPipeline;
 
     rapid::matrix viewProj;
     bool negateViewport = false;
@@ -67,7 +67,7 @@ public:
 
     void createMesh()
     {
-        const uint32_t subdivisionDegree = 4;
+        const uint32_t subdivisionDegree = 8;
         mesh = std::make_unique<BezierPatchMesh>(teapotPatches, kTeapotNumPatches, teapotVertices, subdivisionDegree, cmdBufferCopy);
     }
 
@@ -99,7 +99,7 @@ public:
     void setupPipeline()
     {
         pipelineLayout = std::make_shared<magma::PipelineLayout>(descriptorSetLayout);
-        wireframeDrawPipeline = std::make_shared<magma::GraphicsPipeline>(device, pipelineCache,
+        solidDrawPipeline = std::make_shared<magma::GraphicsPipeline>(device, pipelineCache,
             std::vector<magma::PipelineShaderStage>
             {
                 VertexShader(device, "transform.o"),
@@ -107,7 +107,7 @@ public:
             },
             mesh->getVertexInput(),
             magma::renderstates::triangleList,
-            negateViewport ? magma::renderstates::lineCullBackCW : magma::renderstates::lineCullBackCCW,
+            negateViewport ? magma::renderstates::fillCullBackCW : magma::renderstates::fillCullBackCCW,
             magma::renderstates::noMultisample,
             magma::renderstates::depthLessOrEqual,
             magma::renderstates::dontBlendWriteRGB,
@@ -131,7 +131,7 @@ public:
                 cmdBuffer->setViewport(0, 0, width, negateViewport ? -height : height);
                 cmdBuffer->setScissor(0, 0, width, height);
                 cmdBuffer->bindDescriptorSet(pipelineLayout, descriptorSet);
-                cmdBuffer->bindPipeline(wireframeDrawPipeline);
+                cmdBuffer->bindPipeline(solidDrawPipeline);
                 mesh->draw(cmdBuffer);
             }
             cmdBuffer->endRenderPass();
