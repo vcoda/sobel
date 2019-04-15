@@ -4,16 +4,31 @@
 
 class SobelApp : public VulkanApp
 {
+    struct Framebuffer
+    {
+        std::shared_ptr<magma::ColorAttachment2D> color;
+        std::shared_ptr<magma::ImageView> colorView;
+        std::shared_ptr<magma::RenderPass> renderPass;
+        std::shared_ptr<magma::Framebuffer> framebuffer;
+    } fb;
+
+    std::shared_ptr<magma::CommandBuffer> rtCmdBuffer;
+    std::shared_ptr<magma::Semaphore> rtSemaphore;
+    std::shared_ptr<magma::GraphicsPipeline> rtSolidDrawPipeline;
+    std::vector<magma::PipelineShaderStage> rtShaderStages;
+
     std::unique_ptr<BezierPatchMesh> mesh;
+    std::unique_ptr<magma::aux::BlitRectangle> blitRect;
+
     std::shared_ptr<magma::UniformBuffer<rapid::matrix>> uniformBuffer;
     std::shared_ptr<magma::DescriptorPool> descriptorPool;
     std::shared_ptr<magma::DescriptorSetLayout> descriptorSetLayout;
     std::shared_ptr<magma::DescriptorSet> descriptorSet;
     std::shared_ptr<magma::PipelineLayout> pipelineLayout;
-    std::shared_ptr<magma::GraphicsPipeline> solidDrawPipeline;
 
     rapid::matrix viewProj;
     bool negateViewport = false;
+    constexpr static uint32_t fbSize = 256;
 
 public:
     SobelApp(const AppEntry& entry):
@@ -26,9 +41,11 @@ public:
 
         setupView();
         createMesh();
+        createFramebuffer({fbSize, fbSize});
         createUniformBuffer();
         setupDescriptorSet();
-        setupPipeline();
+        setupPipelines();
+        recordRenderToTextureCommandBuffer();
         recordCommandBuffer(FrontBuffer);
         recordCommandBuffer(BackBuffer);
         timer->run();
@@ -37,7 +54,19 @@ public:
     virtual void render(uint32_t bufferIndex) override
     {
         updatePerspectiveTransform();
-        submitCmdBuffer(bufferIndex);
+        queue->submit(
+            rtCmdBuffer,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            presentFinished, // Wait for swapchain
+            rtSemaphore,
+            nullptr);
+
+        queue->submit(
+            commandBuffers[bufferIndex],
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            rtSemaphore, // Wait for render-to-texture
+            renderFinished,
+            waitFences[bufferIndex]);
     }
 
     void setupView()
@@ -71,6 +100,20 @@ public:
         mesh = std::make_unique<BezierPatchMesh>(teapotPatches, kTeapotNumPatches, teapotVertices, subdivisionDegree, cmdBufferCopy);
     }
 
+    void createFramebuffer(const VkExtent2D& extent)
+    {
+        fb.color = std::make_shared<magma::ColorAttachment2D>(device, VK_FORMAT_R8G8B8A8_UNORM, extent, 1, 1);
+        fb.colorView = std::make_shared<magma::ImageView>(fb.color);
+
+        // Make sure that we are fit to hardware limits
+        const VkImageFormatProperties formatProperties = physicalDevice->getImageFormatProperties(
+            fb.color->getFormat(), VK_IMAGE_TYPE_2D, true, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+        const magma::AttachmentDescription colorAttachment(fb.color->getFormat(), 1,
+            magma::attachments::colorClearStoreReadOnly);
+        fb.renderPass = std::make_shared<magma::RenderPass>(device, colorAttachment);
+        fb.framebuffer = std::make_shared<magma::Framebuffer>(fb.renderPass, fb.colorView);
+    }
+
     void createUniformBuffer()
     {
         uniformBuffer = std::make_shared<magma::UniformBuffer<rapid::matrix>>(device);
@@ -96,10 +139,10 @@ public:
         descriptorSet->update(0, uniformBuffer);
     }
 
-    void setupPipeline()
+    void setupPipelines()
     {
         pipelineLayout = std::make_shared<magma::PipelineLayout>(descriptorSetLayout);
-        solidDrawPipeline = std::make_shared<magma::GraphicsPipeline>(device, pipelineCache,
+        rtSolidDrawPipeline = std::make_shared<magma::GraphicsPipeline>(device, pipelineCache,
             std::vector<magma::PipelineShaderStage>
             {
                 VertexShader(device, "transform.o"),
@@ -113,7 +156,32 @@ public:
             magma::renderstates::dontBlendWriteRGB,
             std::initializer_list<VkDynamicState>{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
             pipelineLayout,
-            renderPass);
+            fb.renderPass);
+
+        blitRect = std::make_unique<magma::aux::BlitRectangle>(renderPass);
+    }
+
+    void recordRenderToTextureCommandBuffer()
+    {
+        rtCmdBuffer = commandPools[0]->allocateCommandBuffer(true);
+        rtSemaphore = std::make_shared<magma::Semaphore>(device);
+
+        rtCmdBuffer->begin();
+        {
+            rtCmdBuffer->setRenderArea(0, 0, fb.framebuffer->getExtent());
+            rtCmdBuffer->beginRenderPass(fb.renderPass, fb.framebuffer, {magma::clears::blackColor});
+            {
+                const uint32_t width = fb.framebuffer->getExtent().width;
+                const uint32_t height = fb.framebuffer->getExtent().height;
+                rtCmdBuffer->setViewport(0, 0, width, negateViewport ? -height : height);
+                rtCmdBuffer->setScissor(magma::Scissor(0, 0, fb.framebuffer->getExtent()));
+                rtCmdBuffer->bindDescriptorSet(pipelineLayout, descriptorSet);
+                rtCmdBuffer->bindPipeline(rtSolidDrawPipeline);
+                mesh->draw(rtCmdBuffer);
+            }
+            rtCmdBuffer->endRenderPass();
+        }
+        rtCmdBuffer->end();
     }
 
     void recordCommandBuffer(uint32_t index)
@@ -121,20 +189,7 @@ public:
         std::shared_ptr<magma::CommandBuffer> cmdBuffer = commandBuffers[index];
         cmdBuffer->begin();
         {
-            cmdBuffer->setRenderArea(0, 0, width, height);
-            cmdBuffer->beginRenderPass(renderPass, framebuffers[index],
-                {
-                    magma::clears::grayColor,
-                    magma::clears::depthOne
-                });
-            {
-                cmdBuffer->setViewport(0, 0, width, negateViewport ? -height : height);
-                cmdBuffer->setScissor(0, 0, width, height);
-                cmdBuffer->bindDescriptorSet(pipelineLayout, descriptorSet);
-                cmdBuffer->bindPipeline(solidDrawPipeline);
-                mesh->draw(cmdBuffer);
-            }
-            cmdBuffer->endRenderPass();
+            blitRect->blit(framebuffers[index], fb.colorView, cmdBuffer);
         }
         cmdBuffer->end();
     }
