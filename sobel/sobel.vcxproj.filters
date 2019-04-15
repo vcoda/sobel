@@ -23,5 +23,11 @@
     <CustomBuild Include="fill.frag">
       <Filter>Resource Files</Filter>
     </CustomBuild>
+    <CustomBuild Include="sobel.frag">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="quad.vert">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>

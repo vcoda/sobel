@@ -158,7 +158,9 @@ public:
             pipelineLayout,
             fb.renderPass);
 
-        blitRect = std::make_unique<magma::aux::BlitRectangle>(renderPass);
+        blitRect = std::make_unique<magma::aux::BlitRectangle>(renderPass,
+            VertexShader(device, "quad.o"),
+            FragmentShader(device, "sobel.o"));
     }
 
     void recordRenderToTextureCommandBuffer()
