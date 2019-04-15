@@ -28,7 +28,6 @@ class SobelApp : public VulkanApp
 
     rapid::matrix viewProj;
     bool negateViewport = false;
-    constexpr static uint32_t fbSize = 256;
 
 public:
     SobelApp(const AppEntry& entry):
@@ -41,7 +40,7 @@ public:
 
         setupView();
         createMesh();
-        createFramebuffer({fbSize, fbSize});
+        createFramebuffer({width, height});
         createUniformBuffer();
         setupDescriptorSet();
         setupPipelines();
@@ -102,7 +101,7 @@ public:
 
     void createFramebuffer(const VkExtent2D& extent)
     {
-        fb.color = std::make_shared<magma::ColorAttachment2D>(device, VK_FORMAT_R8G8B8A8_UNORM, extent, 1, 1);
+        fb.color = std::make_shared<magma::ColorAttachment2D>(device, VK_FORMAT_R8_UNORM, extent, 1, 1);
         fb.colorView = std::make_shared<magma::ImageView>(fb.color);
 
         // Make sure that we are fit to hardware limits
