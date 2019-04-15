@@ -16,6 +16,7 @@ class SobelApp : public VulkanApp
     std::shared_ptr<magma::Semaphore> rtSemaphore;
     std::shared_ptr<magma::GraphicsPipeline> rtSolidDrawPipeline;
     std::vector<magma::PipelineShaderStage> rtShaderStages;
+    std::shared_ptr<magma::PipelineLayout> rtPipelineLayout;
 
     std::unique_ptr<BezierPatchMesh> mesh;
     std::unique_ptr<magma::aux::BlitRectangle> blitRect;
@@ -24,8 +25,7 @@ class SobelApp : public VulkanApp
     std::shared_ptr<magma::DescriptorPool> descriptorPool;
     std::shared_ptr<magma::DescriptorSetLayout> descriptorSetLayout;
     std::shared_ptr<magma::DescriptorSet> descriptorSet;
-    std::shared_ptr<magma::PipelineLayout> pipelineLayout;
-
+    
     rapid::matrix viewProj;
 
 public:
@@ -40,6 +40,7 @@ public:
         createUniformBuffer();
         setupDescriptorSet();
         setupPipelines();
+        createBlitRectangle();
         recordRenderToTextureCommandBuffer();
         recordCommandBuffer(FrontBuffer);
         recordCommandBuffer(BackBuffer);
@@ -136,7 +137,7 @@ public:
 
     void setupPipelines()
     {
-        pipelineLayout = std::make_shared<magma::PipelineLayout>(descriptorSetLayout);
+        rtPipelineLayout = std::make_shared<magma::PipelineLayout>(descriptorSetLayout);
         rtSolidDrawPipeline = std::make_shared<magma::GraphicsPipeline>(device, pipelineCache,
             std::vector<magma::PipelineShaderStage>
             {
@@ -150,8 +151,20 @@ public:
             magma::renderstates::depthLessOrEqual,
             magma::renderstates::dontBlendWriteRGB,
             std::initializer_list<VkDynamicState>{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-            pipelineLayout,
+            rtPipelineLayout,
             fb.renderPass);
+    }
+
+    void createBlitRectangle()
+    {
+        // Don't clear swapchain as we draw fullscreen quad
+        const std::vector<VkSurfaceFormatKHR> surfaceFormats = physicalDevice->getSurfaceFormats(surface);
+        const magma::AttachmentDescription colorAttachment(surfaceFormats[0].format, 1,
+            magma::op::dontCareStore, // Don't care, store
+            magma::op::dontCareDontCare, // Stencil don't care
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+        renderPass = std::make_shared<magma::RenderPass>(device, colorAttachment);
 
         blitRect = std::make_unique<magma::aux::BlitRectangle>(renderPass,
             VertexShader(device, "quad.o"),
@@ -172,7 +185,7 @@ public:
                 const uint32_t height = fb.framebuffer->getExtent().height;
                 rtCmdBuffer->setViewport(0, 0, width, height);
                 rtCmdBuffer->setScissor(magma::Scissor(0, 0, fb.framebuffer->getExtent()));
-                rtCmdBuffer->bindDescriptorSet(pipelineLayout, descriptorSet);
+                rtCmdBuffer->bindDescriptorSet(rtPipelineLayout, descriptorSet);
                 rtCmdBuffer->bindPipeline(rtSolidDrawPipeline);
                 mesh->draw(rtCmdBuffer);
             }
