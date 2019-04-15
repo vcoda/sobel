@@ -30,7 +30,7 @@ class SobelApp : public VulkanApp
 
 public:
     SobelApp(const AppEntry& entry):
-        VulkanApp(entry, TEXT("Sobel"), 512, 512, true)
+        VulkanApp(entry, TEXT("Sobel"), 1280, 720, false)
     {
         initialize();
 
