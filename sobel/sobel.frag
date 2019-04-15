@@ -51,7 +51,7 @@ float Scharr(sampler2D s, vec2 uv)
         {
             vec2 offset = vec2(i, j) * invScreenSize;
             float lum = texture(s, uv + offset).r;
-            grad += vec2(Gx[i][j], Gy[i][j]) * lum;        
+            grad += vec2(Gx[i][j], Gy[i][j]) * lum;
         }
     }
 
