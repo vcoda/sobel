@@ -5,5 +5,5 @@ layout(location = 0) out vec4 oColor;
 
 void main()
 {
-    oColor.rgb = vec3(1.);
+    oColor = vec4(1., 0., 0., 0.);
 }
