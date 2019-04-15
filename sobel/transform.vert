@@ -20,4 +20,5 @@ void main()
 {
     oNormal = normal;
     gl_Position = worldViewProj * position;
+    gl_Position.y = -gl_Position.y;
 }

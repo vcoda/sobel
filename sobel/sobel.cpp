@@ -27,16 +27,12 @@ class SobelApp : public VulkanApp
     std::shared_ptr<magma::PipelineLayout> pipelineLayout;
 
     rapid::matrix viewProj;
-    bool negateViewport = false;
 
 public:
     SobelApp(const AppEntry& entry):
         VulkanApp(entry, TEXT("Sobel"), 512, 512, true)
     {
         initialize();
-
-        // https://stackoverflow.com/questions/48036410/why-doesnt-vulkan-use-the-standard-cartesian-coordinate-system
-        negateViewport = extensions->KHR_maintenance1 || extensions->AMD_negative_viewport_height;
 
         setupView();
         createMesh();
@@ -149,7 +145,7 @@ public:
             },
             mesh->getVertexInput(),
             magma::renderstates::triangleList,
-            negateViewport ? magma::renderstates::fillCullBackCW : magma::renderstates::fillCullBackCCW,
+            magma::renderstates::fillCullBackCCW,
             magma::renderstates::noMultisample,
             magma::renderstates::depthLessOrEqual,
             magma::renderstates::dontBlendWriteRGB,
@@ -174,7 +170,7 @@ public:
             {
                 const uint32_t width = fb.framebuffer->getExtent().width;
                 const uint32_t height = fb.framebuffer->getExtent().height;
-                rtCmdBuffer->setViewport(0, 0, width, negateViewport ? -height : height);
+                rtCmdBuffer->setViewport(0, 0, width, height);
                 rtCmdBuffer->setScissor(magma::Scissor(0, 0, fb.framebuffer->getExtent()));
                 rtCmdBuffer->bindDescriptorSet(pipelineLayout, descriptorSet);
                 rtCmdBuffer->bindPipeline(rtSolidDrawPipeline);
