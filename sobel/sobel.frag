@@ -6,7 +6,7 @@ layout(location = 0) out vec4 oColor;
 layout(binding = 0) uniform sampler2D mask;
 
 // https://www.shadertoy.com/view/MdGGWh
-float Sobel(sampler2D s, vec2 uv)
+float Sobel(sampler2D s, vec2 uv, float radius)
 {
     mat3 Gx = mat3(-1., 0., 1.,
                    -2., 0., 2.,
@@ -16,14 +16,14 @@ float Sobel(sampler2D s, vec2 uv)
                     0.,  0.,  0.,
                     1.,  2.,  1.);
 
-    vec2 invScreenSize = vec2(1.) / SCREEN_SIZE;
+    vec2 kernelSize = vec2(radius) / SCREEN_SIZE;
     vec2 grad = vec2(0.);
 
     for (int i = 0; i < 3; ++i) 
     {
         for (int j = 0; j < 3; ++j)
         {
-            vec2 offset = vec2(i, j) * invScreenSize;
+            vec2 offset = vec2(i - 1, j - 1) * kernelSize;
             float lum = texture(s, uv + offset).r;
             grad += vec2(Gx[i][j], Gy[i][j]) * lum;
         }
@@ -32,7 +32,7 @@ float Sobel(sampler2D s, vec2 uv)
     return length(grad);
 }
 
-float Scharr(sampler2D s, vec2 uv)
+float Scharr(sampler2D s, vec2 uv, float radius)
 {
     mat3 Gx = mat3( 3., 0.,  -3.,
                    10., 0., -10.,
@@ -42,14 +42,14 @@ float Scharr(sampler2D s, vec2 uv)
                     0.,   0.,  0.,
                    -3., -10., -3.);
 
-    vec2 invScreenSize = vec2(1.) / SCREEN_SIZE;
+    vec2 kernelSize = vec2(radius) / SCREEN_SIZE;
     vec2 grad = vec2(0.);
     
     for (int i = 0; i < 3; ++i) 
     {
         for (int j = 0; j < 3; ++j)
         {
-            vec2 offset = vec2(i, j) * invScreenSize;
+            vec2 offset = vec2(i - 1, j - 1) * kernelSize;
             float lum = texture(s, uv + offset).r;
             grad += vec2(Gx[i][j], Gy[i][j]) * lum;
         }
